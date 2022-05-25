@@ -1,0 +1,8 @@
+---
+- name: converge
+  hosts: all
+  become: true
+  tasks:
+    - name: include mysqld_exporter
+      include_role:
+        name: monitoring_mysqld_exporter
