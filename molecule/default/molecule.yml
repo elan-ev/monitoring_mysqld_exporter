@@ -1,0 +1,33 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: podman
+platforms:
+  - name: mysqld_exporter_centos_8
+    image: quay.io/centos/centos:stream8
+    pre_build_image: false
+    command: /sbin/init
+    tmpfs:
+      - /run
+      - /tmp
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+  - name: mysqld_exporter_ubuntu_latest
+    image: docker.io/ubuntu:latest
+    pre_build_image: false
+    privileged: true
+    command: /sbin/init
+    tmpfs:
+      - /run
+      - /tmp
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+lint: |
+  ansible-lint
+  yamllint -c .yamllint .
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      display_skipped_hosts: false
