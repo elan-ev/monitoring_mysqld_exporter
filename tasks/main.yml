@@ -1,0 +1,130 @@
+---
+
+- name: install dependencies
+  package:
+    name: tar
+    state: present
+
+- name: create mysqld_exporter user
+  user:
+    name: mysqld_exporter
+    state: present
+    create_home: false
+
+- name: create mysqld_exporter directory
+  file:
+    path: /etc/mysqld_exporter
+    state: directory
+    owner: mysqld_exporter
+    group: mysqld_exporter
+    mode: '0744'
+
+- name: get meta data
+  block:
+    - name: get latest release data
+      uri:
+        url: https://api.github.com/repos/prometheus/mysqld_exporter/releases/latest  # yamllint disable-line rule:line-length
+        return_content: true
+        headers:
+          Accept: "application/vnd.github.v3+json"
+      register: json_reponse
+    - name: get mysqld_exporter version on remote
+      slurp:
+        src: /etc/mysqld_exporter/mysqld_exporter_version
+      register: mysqld_exporter_remote_version
+      ignore_errors: true
+
+- name: get checksum
+  block:
+    - name: get sha256sums-file link
+      set_fact:
+        _sha256_uri: '{{ item.browser_download_url }}'
+      when: "'sha256sums' in item.name"
+      with_items: '{{ json_reponse.json.assets }}'
+    - name: get checksum from github
+      set_fact:
+        _checksums: "{{ lookup('url', _sha256_uri, wantlist=True) | list }}"
+    - name: get checksum for amd64
+      set_fact:
+        mysqld_exporter_checksum: "{{ item.split(' ')[0] }}"
+      with_items: "{{ _checksums }}"
+      when: "'linux-amd64.tar.gz' in item"
+  when: mysqld_exporter_remote_version["failed"] or mysqld_exporter_remote_version["content"] | b64decode != json_reponse.json.tag_name  # yamllint disable-line rule:line-length
+
+- name: download and install mysqld_exporter
+  block:
+    - name: get mysqld_exporter download link
+      set_fact:
+        _mysqld_exporter_uri: '{{ item.browser_download_url }}'
+      when: "'linux-amd64.tar.gz' in item.name"
+      with_items: '{{ json_reponse.json.assets }}'
+    - name: download archive
+      get_url:
+        url: '{{ _mysqld_exporter_uri }}'
+        dest: /tmp/mysqld_exporter-linux-amd64.tar.gz
+        checksum: 'sha256:{{ mysqld_exporter_checksum }}'
+        mode: '0644'
+    - name: unpack archive
+      unarchive:
+        remote_src: true
+        src: /tmp/mysqld_exporter-linux-amd64.tar.gz
+        dest: /tmp
+        list_files: true
+      register: _unarchived
+    - name: register unarchived folder
+      set_fact:
+        _unarchived_folder: '{{ _unarchived.files[0].split("/")[0] }}'
+    - name: move mysqld_exporter
+      copy:
+        remote_src: true
+        src: '/tmp/{{ _unarchived_folder }}/mysqld_exporter'
+        dest: /usr/local/bin/mysqld_exporter
+        owner: root
+        group: root
+        mode: '0755'
+    - name: clean up temp
+      file:
+        path: '{{ item }}'
+        state: absent
+      with_items:
+        - /tmp/mysqld_exporter-linux-amd64.tar.gz
+        - '/tmp/{{ _unarchived_folder }}'
+    - name: create binary version file
+      template:
+        src: mysqld_exporter_version.j2
+        dest: /etc/mysqld_exporter/mysqld_exporter_version
+        owner: mysqld_exporter
+        group: mysqld_exporter
+        mode: '0644'
+  when: mysqld_exporter_remote_version["failed"] or mysqld_exporter_remote_version["content"] | b64decode != json_reponse.json.tag_name  # yamllint disable-line rule:line-length
+  notify: restart mysqld_exporter
+
+- name: copy service file
+  template:
+    src: mysqld_exporter.service.j2
+    dest: /etc/systemd/system/mysqld_exporter.service
+    mode: '0644'
+    owner: root
+    group: root
+  notify: restart mysqld_exporter
+
+- name: create mysqld_exporter user on database
+  mysql_user:
+    login_user: root
+    login_password: '{{ mysqld_exporter_db_root_password }}'
+    name: exporter
+    password: '{{ mysqld_exporter_password }}'
+    priv: '{{ item }}'
+    state: present
+    resource_limits:
+      MAX_USER_CONNECTIONS: 3
+  loop:
+    - '*.*:SELECT'
+    - '*.*:PROCESS'
+    - '*.*:REPLICATION CLIENT'
+
+- name: start and enable mysqld_exporter
+  service:
+    name: mysqld_exporter
+    state: started
+    enabled: true

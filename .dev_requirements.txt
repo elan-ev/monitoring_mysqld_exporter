@@ -1,0 +1,6 @@
+ansible
+ansible-lint
+yamllint
+molecule==3.5.2
+molecule-docker
+molecule-podman
