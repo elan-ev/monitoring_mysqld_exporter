@@ -6,8 +6,8 @@ After=network.target
 User=mysqld_exporter
 Group=mysqld_exporter
 Type=simple
-Environment=DATA_SOURCE_NAME=exporter:{{ mysqld_exporter_password }}@(localhost:3306)/
-ExecStart=/usr/local/bin/mysqld_exporter
+Environment=MYSQLD_EXPORTER_PASSWORD={{ mysqld_exporter_password }}
+ExecStart=/usr/local/bin/mysqld_exporter --mysqld.address=localhost:3306 --mysqld.username=exporter
 Restart=always
 
 [Install]
