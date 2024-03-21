@@ -122,6 +122,7 @@
     - '*.*:SELECT'
     - '*.*:PROCESS'
     - '*.*:REPLICATION CLIENT'
+    - '*.*:SLAVE MONITOR'
 
 - name: start and enable mysqld_exporter
   service:
