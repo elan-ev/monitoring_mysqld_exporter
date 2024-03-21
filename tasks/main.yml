@@ -114,14 +114,10 @@
     login_password: '{{ mysqld_exporter_db_root_password }}'
     name: exporter
     password: '{{ mysqld_exporter_password }}'
-    priv: '{{ item }}'
+    priv: '*.*:SELECT,PROCESS,REPLICATION CLIENT,SLAVE MONITOR'
     state: present
     resource_limits:
       MAX_USER_CONNECTIONS: 3
-  loop:
-    - '*.*:SELECT'
-    - '*.*:PROCESS'
-    - '*.*:REPLICATION CLIENT'
 
 - name: start and enable mysqld_exporter
   service:
